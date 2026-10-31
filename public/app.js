@@ -62,6 +62,7 @@ async function start() {
   session = s;
   $('login').hidden = true; $('app').hidden = false;
   fillStatic();
+  $('filterBox').open = window.innerWidth > 700;
   items = await api('/api/items');
   render();
 }
@@ -116,10 +117,12 @@ function visible() {
   return list.sort(cmp);
 }
 
+const photoUrl = (id, p, thumb) => `/photos/${id}/${p}${thumb ? '.t' : ''}.jpg`;
+
 function thumb(it) {
   const box = h('div', { class: 'thumb' });
   box.style.setProperty('--sw', COLORS[it.color] || '#9a9a9a');
-  if (it.photos[0]) box.append(h('img', { src: `/photos/${it.id}/${it.photos[0]}.t.jpg`, alt: '', loading: 'lazy' }));
+  if (it.photos[0]) box.append(h('img', { src: photoUrl(it.id, it.photos[0], true), alt: '', loading: 'lazy' }));
   else box.append('👕');
   return box;
 }
@@ -127,6 +130,8 @@ function thumb(it) {
 function render() {
   fillFilters();
   const list = visible();
+  const nFilters = ['fCat', 'fOwner', 'fSeason', 'fColor', 'fSize'].filter(id => $(id).value).length;
+  $('filterSum').textContent = nFilters ? `Filters en sorteren (${nFilters} actief)` : 'Filters en sorteren';
   $('grid').replaceChildren(...list.map(it => h('button', { class: 'card', onclick: () => openItem(it) },
     thumb(it),
     h('div', { class: 'cname' }, it.name || 'Zonder naam'),
@@ -214,7 +219,7 @@ $('pick').addEventListener('change', async (e) => { const f = [...e.target.files
 function drawPhotos() {
   const strip = $('photos');
   strip.replaceChildren(
-    ...cur.photos.map(p => h('div', { class: 'ph' }, h('img', { src: `/photos/${cur.item.id}/${p}.t.jpg`, alt: '' }),
+    ...cur.photos.map(p => h('div', { class: 'ph' }, h('img', { src: photoUrl(cur.item.id, p, true), alt: '' }),
       h('button', { type: 'button', 'aria-label': 'Foto verwijderen', onclick: () => { cur.photos = cur.photos.filter(x => x !== p); drawPhotos(); } }, '×'))),
     ...cur.pending.map(p => h('div', { class: 'ph' }, h('img', { src: p.url, alt: '' }),
       h('button', { type: 'button', 'aria-label': 'Foto verwijderen', onclick: () => { URL.revokeObjectURL(p.url); cur.pending = cur.pending.filter(x => x !== p); drawPhotos(); } }, '×'))));

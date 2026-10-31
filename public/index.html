@@ -31,6 +31,8 @@
   <main>
     <section id="view-kast" class="view">
       <input id="search" type="search" placeholder="Zoek op naam, merk, kleur, tag…" autocomplete="off">
+      <details id="filterBox">
+      <summary id="filterSum">Filters en sorteren</summary>
       <div class="filters">
         <select id="fCat" aria-label="Categorie"></select>
         <select id="fOwner" aria-label="Van wie"></select>
@@ -45,6 +47,7 @@
           <option value="cat">Per categorie</option>
         </select>
       </div>
+      </details>
       <div class="chips" id="chips">
         <button data-c="kast" class="on">In de kast</button>
         <button data-c="lazy">Lang niet gedragen</button>
