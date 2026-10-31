@@ -1,0 +1,12 @@
+{
+  "name": "kledingkast",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gezins-inventaris van kleding met foto's, filters en optionele AI-herkenning",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test test/api.test.js"
+  }
+}

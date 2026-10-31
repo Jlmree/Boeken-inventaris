@@ -1,0 +1,9 @@
+services:
+  kledingkast:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"   # alleen lokaal; zet er een reverse proxy met https voor
+    volumes:
+      - ./data:/data            # database en foto's, hier maak je een back-up van

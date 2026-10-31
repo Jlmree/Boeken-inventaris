@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kledingkast</title>
+<meta name="theme-color" content="#2b3a55">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="login" hidden>
+  <form id="loginForm">
+    <h1>Kledingkast</h1>
+    <p class="muted">Log in met het gezinswachtwoord.</p>
+    <input id="pw" type="password" placeholder="Wachtwoord" autocomplete="current-password" required>
+    <button class="primary" type="submit">Inloggen</button>
+    <p id="loginErr" class="err" role="alert"></p>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <h1>Kledingkast</h1>
+    <span id="count" class="muted"></span>
+  </header>
+
+  <main>
+    <section id="view-kast" class="view">
+      <input id="search" type="search" placeholder="Zoek op naam, merk, kleur, tag…" autocomplete="off">
+      <div class="filters">
+        <select id="fCat" aria-label="Categorie"></select>
+        <select id="fOwner" aria-label="Van wie"></select>
+        <select id="fSeason" aria-label="Seizoen"></select>
+        <select id="fColor" aria-label="Kleur"></select>
+        <select id="fSize" aria-label="Maat"></select>
+        <select id="fSort" aria-label="Sorteren">
+          <option value="new">Nieuwste eerst</option>
+          <option value="name">Naam A–Z</option>
+          <option value="least">Minst gedragen</option>
+          <option value="most">Meest gedragen</option>
+          <option value="cat">Per categorie</option>
+        </select>
+      </div>
+      <div class="chips" id="chips">
+        <button data-c="kast" class="on">In de kast</button>
+        <button data-c="lazy">Lang niet gedragen</button>
+        <button data-c="was">In de was</button>
+        <button data-c="weg">Weggegeven</button>
+        <button data-c="all">Alles</button>
+      </div>
+      <div id="grid" class="grid"></div>
+      <p id="empty" class="muted center" hidden></p>
+    </section>
+
+    <section id="view-settings" class="view" hidden>
+      <h2>Instellingen</h2>
+      <label>Wie ben jij op dit toestel?
+        <select id="me"></select>
+      </label>
+      <p class="muted">Nieuwe kleding wordt standaard op jouw naam gezet.</p>
+      <div class="row">
+        <button id="exportCsv">Export CSV</button>
+        <button id="logout" class="danger">Uitloggen</button>
+      </div>
+      <p id="stats" class="muted"></p>
+    </section>
+  </main>
+
+  <button id="add" class="fab" aria-label="Kledingstuk toevoegen">+</button>
+
+  <nav class="tabs">
+    <button data-v="kast" class="on"><span class="ico">👕</span><span>Kast</span></button>
+    <button data-v="settings"><span class="ico">⚙️</span><span>Instellingen</span></button>
+  </nav>
+</div>
+
+<dialog id="dlg">
+  <form id="itemForm" method="dialog">
+    <div id="photos" class="photos"></div>
+    <div class="row">
+      <label class="btn">📷 Foto maken<input id="shot" type="file" accept="image/*" capture="environment" hidden></label>
+      <label class="btn">🖼️ Uit galerij<input id="pick" type="file" accept="image/*" multiple hidden></label>
+    </div>
+    <button type="button" id="aiBtn" class="ai" hidden>✨ Herken met AI</button>
+    <p id="aiMsg" class="muted" role="status"></p>
+
+    <label>Naam
+      <input id="fName" placeholder="bv. Blauwe jeans" required autocomplete="off">
+    </label>
+    <div class="row">
+      <label>Categorie <select id="fCategory"></select></label>
+      <label>Kleur <select id="fColorSel"></select></label>
+    </div>
+    <div class="row">
+      <label>Maat <input id="fSizeIn" list="sizes" placeholder="M, 38, 104…" autocomplete="off"></label>
+      <label>Merk <input id="fBrand" autocomplete="off"></label>
+    </div>
+    <datalist id="sizes"></datalist>
+    <div class="row">
+      <label>Seizoen <select id="fSeasonSel"></select></label>
+      <label>Van wie <select id="fOwnerSel"></select></label>
+    </div>
+    <div class="row">
+      <label>Materiaal <input id="fMaterial" autocomplete="off"></label>
+      <label>Plek in de kast <input id="fLocation" placeholder="bv. lade 2" autocomplete="off"></label>
+    </div>
+    <div class="row">
+      <label>Prijs (€) <input id="fPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+      <label>Gekocht op <input id="fBought" type="date"></label>
+    </div>
+    <label>Tags (met komma's)
+      <input id="fTags" placeholder="werk, feest, sport" autocomplete="off">
+    </label>
+    <label>Status
+      <select id="fStatus">
+        <option value="kast">In de kast</option>
+        <option value="was">In de was</option>
+        <option value="weg">Weggegeven of weg</option>
+      </select>
+    </label>
+    <label>Notities <textarea id="fNotes" rows="2"></textarea></label>
+
+    <div id="wearBox" class="wear" hidden>
+      <span id="wearInfo"></span>
+      <button type="button" id="wearBtn">👕 Vandaag gedragen</button>
+    </div>
+    <p id="saveErr" class="err" role="alert"></p>
+    <div class="row">
+      <button type="submit" class="primary">Opslaan</button>
+      <button type="button" id="delBtn" class="danger">Verwijderen</button>
+      <button type="button" id="closeBtn">Sluiten</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

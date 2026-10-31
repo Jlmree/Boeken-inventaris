@@ -1,42 +1,55 @@
-# 📚 Boekenkast
+# 👕 Kledingkast
 
-Gezins-inventaris van boeken. Scan de barcode (ISBN) met je telefoon en titel, auteur en cover worden automatisch opgezocht (Google Books, daarna Open Library).
+Inventaris van de kleding van het hele gezin. Foto maken, maat en gegevens invullen, en de app sorteert en filtert. Draait op een eigen server, zodat foto's en gegevens bij jou blijven.
 
-- Scannen met de camera, een foto, of ISBN intypen
-- Overzicht met covers, zoeken, filteren (gelezen / ongelezen / uitgeleend / geleend), sorteren
-- Categorie (Fictie, Non-fictie, Kinderboeken, …) en genre per boek, automatisch voorgesteld en te wijzigen; filteren op beide
-- Per boek: van wie, gelezen (door wie), uitgeleend aan / geleend van (met datum), notities
-- Dubbelen worden herkend bij het scannen
-- Snel toevoegen: gevonden boeken direct opslaan en doorscannen, ideaal voor een hele kast achter elkaar
-- Werkt als app op je telefoon (PWA) en op de computer, ook offline
-- Delen met het gezin via Supabase (gratis), export naar CSV
+## Wat het doet
+- **Foto's** per kledingstuk (tot 6), op je telefoon automatisch verkleind
+- **Gegevens:** naam, categorie, kleur, maat, merk, seizoen, materiaal, plek in de kast, prijs, aankoopdatum, tags, notities, van wie
+- **Kleur uit de foto** wordt automatisch voorgesteld, zonder AI
+- **AI-herkenning (optioneel):** naam, categorie, kleur, seizoen, materiaal en merk worden voorgesteld uit de foto. Je past alles zelf aan
+- **Filteren en sorteren** op categorie, van wie, seizoen, kleur, maat, minst/meest gedragen
+- **Gedragen-teller:** één tik op "Vandaag gedragen". Zo zie je wat je vaak draagt, de prijs per keer, en wat je al een half jaar niet meer hebt aangehad
+- **Status:** in de kast, in de was, weggegeven (handig voor kinderkleding die te klein wordt)
+- Export naar CSV, werkt als app op het beginscherm (PWA)
 
-Geen build-stap: het zijn gewone statische bestanden.
-
-## Uitproberen
+## Installeren op je server (Docker)
 ```bash
-python3 -m http.server 8000   # open http://localhost:8000
+git clone https://github.com/Jlmree/Boeken-inventaris.git kledingkast
+cd kledingkast
+cp .env.example .env      # pas FAMILY_PASSWORD en MEMBERS aan
+docker compose up -d --build
 ```
-Camera werkt alleen via `https://` of `localhost`.
+De app luistert op `127.0.0.1:3000`. Zet er een reverse proxy met https voor, want de camera en de login-cookie hebben https nodig. Met Caddy is dat:
+```
+kleding.jouwdomein.nl {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+Open daarna `https://kleding.jouwdomein.nl` op je telefoon en kies *Zet op beginscherm*.
 
-## Titels automatisch laten invullen: eigen Google-sleutel (aanbevolen)
-Google Books geeft zonder sleutel een gedeelde dagelijkse limiet, die vaak op is. Dan vult de app niets in. Een eigen, gratis sleutel lost dat op (ruim genoeg voor een boekenkast):
-1. Ga naar [console.cloud.google.com](https://console.cloud.google.com) en maak een project.
-2. Zoek **Books API** en klik op *Enable*.
-3. Ga naar **APIs & Services → Credentials → Create credentials → API key**.
-4. Beperk de sleutel (aanbevolen): *Website restrictions* → `https://jlmree.github.io/*`, en *API restrictions* → Books API.
-5. Plak de sleutel in de app bij **Instellingen → Google Books API-sleutel**, of zet hem in `config.js` (`googleKey`) zodat iedereen hem automatisch heeft.
+### Zonder Docker
+Je hebt Node.js 22.13 of nieuwer nodig. Er zijn geen npm-pakketten nodig.
+```bash
+FAMILY_PASSWORD=geheim node server/server.js
+```
 
-## Online zetten (voor je telefoon)
-GitHub: **Settings → Pages → Deploy from branch** (`main`, map `/`). Open de link op je telefoon en kies *Zet op beginscherm*.
+## AI-herkenning aanzetten
+Maak een sleutel op [console.anthropic.com](https://console.anthropic.com) en zet hem in `.env` bij `ANTHROPIC_API_KEY`. Daarna verschijnt de knop **✨ Herken met AI** zodra je een foto toevoegt, en wordt de eerste foto automatisch herkend. De foto wordt dan naar Anthropic gestuurd; zonder sleutel verlaat niets je server. Het standaardmodel (`claude-haiku-5-5`) is het kleinste en snelste model; je betaalt per herkende foto, kijk de actuele prijzen na in je Anthropic-account. Met `AI_MODEL` kun je een ander model kiezen.
 
-## Gezin laten delen (5 minuten)
-1. Maak een gratis project op [supabase.com](https://supabase.com).
-2. Plak `supabase/schema.sql` in **SQL Editor** en klik *Run*.
-3. Kopieer onder **Project Settings → API** de *Project URL* en de *anon public key*.
-4. Open de app → **Instellingen** → vul URL, key en een zelfverzonnen **gezinscode** in.
-   (Of zet ze vast in `config.js`, dan is iedereen meteen gekoppeld.)
-5. Op elk toestel dezelfde gezinscode invullen. Boeken verschijnen overal.
+## Back-up
+Alles staat in de map `data/`: de database (`kast.db`) en de foto's. Maak daar regelmatig een kopie van, bijvoorbeeld:
+```bash
+tar czf kledingkast-$(date +%F).tgz data/
+```
 
-De gezinscode werkt als wachtwoord: de database geeft alleen boeken terug aan wie de code meestuurt. Kies dus iets lastigs te raden.
-Zonder Supabase blijven de boeken lokaal op het toestel staan.
+## Beveiliging
+- Eén gezinswachtwoord. Na inloggen blijft elk toestel 90 dagen ingelogd (`SESSION_DAYS`)
+- Foto's en gegevens zijn alleen na inloggen te zien
+- Inloggen wordt afgeremd na 8 pogingen per minuut
+- Zet altijd https voor de app
+
+## Ontwikkelen
+```bash
+npm test                                   # servertests
+FAMILY_PASSWORD=test node server/server.js # draait op http://localhost:3000
+```
