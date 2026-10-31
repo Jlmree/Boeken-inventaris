@@ -19,6 +19,14 @@ python3 -m http.server 8000   # open http://localhost:8000
 ```
 Camera werkt alleen via `https://` of `localhost`.
 
+## Titels automatisch laten invullen: eigen Google-sleutel (aanbevolen)
+Google Books geeft zonder sleutel een gedeelde dagelijkse limiet, die vaak op is. Dan vult de app niets in. Een eigen, gratis sleutel lost dat op (ruim genoeg voor een boekenkast):
+1. Ga naar [console.cloud.google.com](https://console.cloud.google.com) en maak een project.
+2. Zoek **Books API** en klik op *Enable*.
+3. Ga naar **APIs & Services → Credentials → Create credentials → API key**.
+4. Beperk de sleutel (aanbevolen): *Website restrictions* → `https://jlmree.github.io/*`, en *API restrictions* → Books API.
+5. Plak de sleutel in de app bij **Instellingen → Google Books API-sleutel**, of zet hem in `config.js` (`googleKey`) zodat iedereen hem automatisch heeft.
+
 ## Online zetten (voor je telefoon)
 GitHub: **Settings → Pages → Deploy from branch** (`main`, map `/`). Open de link op je telefoon en kies *Zet op beginscherm*.
 

@@ -3,5 +3,6 @@
 export const DEFAULTS = {
   supabaseUrl: '',
   supabaseKey: '',
-  family: ''
+  family: '',
+  googleKey: '' // Google Books API-sleutel (zie README), voorkomt de gedeelde dagelijkse limiet
 };

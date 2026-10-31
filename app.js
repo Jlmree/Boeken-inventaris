@@ -1,5 +1,5 @@
 import { getSettings, saveSettings, loadBooks, putBook, deleteBook, newId, pull, syncEnabled } from './store.js';
-import { lookupIsbn, normalizeIsbn, CATEGORIES, GENRES } from './lookup.js';
+import { lookupIsbn, explainProblems, normalizeIsbn, CATEGORIES, GENRES } from './lookup.js';
 import { startCamera, decodeImage } from './scanner.js';
 
 const $ = (id) => document.getElementById(id);
@@ -239,7 +239,7 @@ async function handleCode(raw) {
       return;
     }
     scanmsg('Opzoeken…');
-    const info = await lookupIsbn(isbn);
+    const { info, problems } = await lookupIsbn(isbn, { googleKey: getSettings().googleKey });
     const base = { id: newId(), isbn, added: Date.now() };
     if (info && quick) {
       const book = { ...base, ...info, owner: getSettings().name };
@@ -249,7 +249,7 @@ async function handleCode(raw) {
     } else if (info) { scanmsg('Gevonden!'); openBook({ ...base, ...info }, true); }
     else {
       stopScan();
-      scanmsg('Niet gevonden. Vul de titel zelf in.');
+      scanmsg(explainProblems(problems));
       openBook({ ...base, title: '', authors: '' }, true);
     }
     $('isbnInput').value = '';
@@ -260,12 +260,13 @@ async function handleCode(raw) {
 function fillSettings() {
   const s = getSettings();
   $('setName').value = s.name; $('setFamily').value = s.family;
-  $('setUrl').value = s.supabaseUrl; $('setKey').value = s.supabaseKey;
+  $('setUrl').value = s.supabaseUrl; $('setKey').value = s.supabaseKey; $('setGoogle').value = s.googleKey;
 }
 $('saveSettings').addEventListener('click', async () => {
   saveSettings({
     name: $('setName').value.trim(), family: $('setFamily').value.trim(),
-    supabaseUrl: $('setUrl').value.trim(), supabaseKey: $('setKey').value.trim()
+    supabaseUrl: $('setUrl').value.trim(), supabaseKey: $('setKey').value.trim(),
+    googleKey: $('setGoogle').value.trim()
   });
   $('setmsg').textContent = 'Synchroniseren…';
   await refresh();

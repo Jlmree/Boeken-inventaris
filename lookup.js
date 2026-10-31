@@ -50,18 +50,19 @@ export function classify(raw) {
 
 const https = (u) => (u ? u.replace(/^http:/, 'https:') : '');
 
+/** Probeert één keer opnieuw bij een serverfout (5xx). */
 async function fetchRetry(url) {
-  for (let i = 0; i < 2; i++) {
-    const r = await fetch(url);
-    if (r.ok || (r.status !== 429 && r.status < 500)) return r;
-    await new Promise(res => setTimeout(res, 800));
-  }
+  const r = await fetch(url);
+  if (r.status < 500) return r;
+  await new Promise(res => setTimeout(res, 800));
   return fetch(url);
 }
 
-async function google(isbn) {
-  const r = await fetchRetry('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&maxResults=1');
-  if (!r.ok) return null;
+async function google(isbn, { googleKey } = {}) {
+  const key = googleKey ? '&key=' + encodeURIComponent(googleKey) : '';
+  const r = await fetchRetry('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&maxResults=1' + key);
+  if (r.status === 429 || r.status === 403) throw new Error('google-limiet');
+  if (!r.ok) throw new Error('google-fout');
   const v = (await r.json()).items?.[0]?.volumeInfo;
   if (!v) return null;
   return {
@@ -75,8 +76,9 @@ async function google(isbn) {
 }
 
 async function openLibrary(isbn) {
+  // Eigen foutmelding zodat de app kan uitleggen waarom er niets gevonden is.
   const r = await fetchRetry('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
-  if (!r.ok) return null;
+  if (!r.ok) throw new Error('openlibrary-fout');
   const v = (await r.json())['ISBN:' + isbn];
   if (!v) return null;
   return {
@@ -103,15 +105,33 @@ function imageOk(url) {
 
 const FIELDS = ['title', 'authors', 'publisher', 'year', 'category', 'genre'];
 
-/** Zoekt in alle bronnen, vult ontbrekende velden aan uit de volgende bron en kiest de eerste cover die echt laadt. */
-export async function lookupIsbn(isbn) {
-  const results = await Promise.all([google, openLibrary].map(fn => fn(isbn).catch(e => { console.warn('lookup fout', e); return null; })));
+/**
+ * Zoekt in alle bronnen, vult ontbrekende velden aan uit de volgende bron en kiest de eerste cover die echt laadt.
+ * Geeft { info, problems } terug: info is null als niets gevonden is, problems bevat bronnen die niet antwoordden.
+ */
+export async function lookupIsbn(isbn, opts = {}) {
+  const problems = [];
+  const results = await Promise.all([['google', google], ['openlibrary', openLibrary]].map(async ([name, fn]) => {
+    try { return await fn(isbn, opts); } catch (e) {
+      console.warn('lookup fout', name, e);
+      problems.push(e.message === 'Failed to fetch' || e instanceof TypeError ? name + '-netwerk' : e.message);
+      return null;
+    }
+  }));
   const found = results.filter(r => r && r.title);
-  if (!found.length) return null;
+  if (!found.length) return { info: null, problems };
   const merged = { isbn };
   for (const f of FIELDS) merged[f] = found.map(r => r[f]).find(Boolean) || '';
   const covers = [...found.map(r => r.cover), `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`].filter(Boolean);
   merged.cover = '';
   for (const c of [...new Set(covers)]) if (await imageOk(c)) { merged.cover = c; break; }
-  return merged;
+  return { info: merged, problems };
+}
+
+/** Uitleg voor de gebruiker als er niets gevonden is. */
+export function explainProblems(problems) {
+  if (problems.includes('google-limiet')) return 'Google Books-limiet bereikt. Zet een gratis API-sleutel bij Instellingen, of vul de titel zelf in.';
+  if (problems.some(p => p.endsWith('-netwerk'))) return 'Geen verbinding met de opzoekdienst. Controleer je internet, of vul de titel zelf in.';
+  if (problems.length) return 'De opzoekdienst gaf een fout. Probeer het later opnieuw, of vul de titel zelf in.';
+  return 'Dit boek staat niet in de opzoekdiensten. Vul de titel zelf in.';
 }
