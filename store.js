@@ -5,7 +5,7 @@ const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; 
 const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 export function getSettings() {
-  return { name: '', family: DEFAULTS.family, supabaseUrl: DEFAULTS.supabaseUrl, supabaseKey: DEFAULTS.supabaseKey, ...read(K.settings, {}) };
+  return { name: '', family: DEFAULTS.family, supabaseUrl: DEFAULTS.supabaseUrl, supabaseKey: DEFAULTS.supabaseKey, googleKey: DEFAULTS.googleKey, ...read(K.settings, {}) };
 }
 export function saveSettings(s) { write(K.settings, s); }
 
