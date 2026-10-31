@@ -7,6 +7,10 @@ let books = loadBooks();
 let filter = 'all';
 let stopCam = null;
 let busy = false;
+let lastCode = '', lastAt = 0;
+const quickOn = () => $('quick').checked;
+try { $('quick').checked = localStorage.getItem('boeken.quick') === '1'; } catch { /* geen opslag */ }
+$('quick').addEventListener('change', () => { try { localStorage.setItem('boeken.quick', quickOn() ? '1' : '0'); } catch { /* geen opslag */ } });
 
 /* ---------- helpers ---------- */
 function h(tag, attrs = {}, ...kids) {
@@ -222,16 +226,32 @@ async function handleCode(raw) {
   if (busy) return;
   const isbn = normalizeIsbn(raw);
   if (!isbn) { scanmsg(`"${raw}" is geen geldig ISBN. Probeer opnieuw.`); return; }
+  if (quickOn() && stopCam && isbn === lastCode && Date.now() - lastAt < 4000) return; // dezelfde barcode blijft in beeld
+  lastCode = isbn; lastAt = Date.now();
   busy = true;
   try {
-    stopScan();
+    const quick = quickOn();
+    if (!quick) stopScan();
     const have = books.find(b => b.isbn === isbn);
-    if (have) { scanmsg('Dit boek heb je al.'); toast('Heb je al 📚'); openBook(have); return; }
+    if (have) {
+      scanmsg(`Heb je al: ${have.title}`); toast('Heb je al 📚');
+      if (!quick) openBook(have);
+      return;
+    }
     scanmsg('Opzoeken…');
     const info = await lookupIsbn(isbn);
     const base = { id: newId(), isbn, added: Date.now() };
-    if (info) { scanmsg('Gevonden!'); openBook({ ...base, ...info }, true); }
-    else { scanmsg('Niet gevonden. Vul de titel zelf in.'); openBook({ ...base, title: '', authors: '' }, true); }
+    if (info && quick) {
+      const book = { ...base, ...info, owner: getSettings().name };
+      books.push(book); render();
+      scanmsg(`Toegevoegd: ${book.title}`); toast('Toegevoegd ✓');
+      setSync(await putBook(book));
+    } else if (info) { scanmsg('Gevonden!'); openBook({ ...base, ...info }, true); }
+    else {
+      stopScan();
+      scanmsg('Niet gevonden. Vul de titel zelf in.');
+      openBook({ ...base, title: '', authors: '' }, true);
+    }
     $('isbnInput').value = '';
   } finally { busy = false; }
 }

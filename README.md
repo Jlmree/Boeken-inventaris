@@ -7,6 +7,7 @@ Gezins-inventaris van boeken. Scan de barcode (ISBN) met je telefoon en titel, a
 - Categorie (Fictie, Non-fictie, Kinderboeken, …) en genre per boek, automatisch voorgesteld en te wijzigen; filteren op beide
 - Per boek: van wie, gelezen (door wie), uitgeleend aan / geleend van (met datum), notities
 - Dubbelen worden herkend bij het scannen
+- Snel toevoegen: gevonden boeken direct opslaan en doorscannen, ideaal voor een hele kast achter elkaar
 - Werkt als app op je telefoon (PWA) en op de computer, ook offline
 - Delen met het gezin via Supabase (gratis), export naar CSV
 
