@@ -1,15 +1,17 @@
 const $ = (id) => document.getElementById(id);
 
 const CATEGORIES = ['Tops', 'Broeken', 'Jurken & rokken', 'Jassen', 'Schoenen', 'Accessoires', 'Ondergoed & sokken', 'Nachtkleding', 'Sport'];
-const COLORS = { zwart: '#1b1b1d', wit: '#f5f5f2', grijs: '#8b8d93', beige: '#d8c7a6', bruin: '#6d4a32', rood: '#c0392b', roze: '#e58fb0', oranje: '#e67e22', geel: '#e9c53a', groen: '#3f8f55', blauw: '#3478c6', marineblauw: '#1f2f58', paars: '#7b4fa8', multi: '#9a9a9a' };
+const CAT_ICON = { Tops: '👕', Broeken: '👖', 'Jurken & rokken': '👗', Jassen: '🧥', Schoenen: '👟', Accessoires: '👜', 'Ondergoed & sokken': '🧦', Nachtkleding: '🌙', Sport: '🏃' };
+const COLORS = { zwart: '#1b1b1d', wit: '#f5f5f2', grijs: '#8b8d93', beige: '#d8c7a6', bruin: '#6d4a32', rood: '#c0392b', roze: '#e58fb0', oranje: '#e67e22', geel: '#e9c53a', groen: '#3f8f55', blauw: '#3478c6', marineblauw: '#1f2f58', paars: '#7b4fa8', multi: 'linear-gradient(135deg,#c0392b,#e9c53a,#3f8f55,#3478c6)' };
 const SEASONS = ['alle seizoenen', 'zomer', 'winter', 'lente/herfst'];
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '34', '36', '38', '40', '42', '44', '46', '48', '50', '56', '62', '68', '74', '80', '86', '92', '98', '104', '110', '116', '122', '128', '134', '140', '152', '164', '176'];
+const AV_COLORS = ['#c06a3f', '#4f7f95', '#7c6aa8', '#5f8f5a', '#b5527a', '#8a7a3a'];
 const LAZY_DAYS = 180;
 
 let items = [];
 let session = { members: [], ai: false };
 let cur = null; // { item, isNew, pending: [{pid, full, thumb, url}], photos: [pid] }
-let chip = 'kast';
+const F = { q: '', cat: '', color: '', owner: '', season: '', size: '', status: 'kast', sort: 'new', view: 'grid' };
 
 /* ---------- helpers ---------- */
 function h(tag, attrs = {}, ...kids) {
@@ -32,11 +34,20 @@ const pid = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toSt
 const local = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
 const lastWorn = (it) => (it.wears.length ? Math.max(...it.wears) : 0);
 const daysAgo = (ts) => Math.floor((Date.now() - ts) / 864e5);
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 function agoText(ts) {
   const d = daysAgo(ts);
   return d <= 0 ? 'vandaag' : d === 1 ? 'gisteren' : d < 60 ? `${d} dagen geleden` : `${Math.round(d / 30)} maanden geleden`;
 }
 const isLazy = (it) => it.status === 'kast' && (it.wears.length ? daysAgo(lastWorn(it)) > LAZY_DAYS : daysAgo(it.created) > LAZY_DAYS);
+const swatch = (c) => COLORS[c] || '#9a9a9a';
+const money = (n) => '€' + Math.round(n).toLocaleString('nl-NL');
+function avatar(name, cls = '') {
+  const i = Math.max(0, session.members.indexOf(name));
+  const el = h('span', { class: 'av ' + cls, title: name }, (name || '?').slice(0, 1).toUpperCase());
+  el.style.setProperty('--av', AV_COLORS[i % AV_COLORS.length]);
+  return el;
+}
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { credentials: 'same-origin', ...opts });
@@ -62,7 +73,7 @@ async function start() {
   session = s;
   $('login').hidden = true; $('app').hidden = false;
   fillStatic();
-  $('filterBox').open = window.innerWidth > 700;
+  $('moreFilters').open = false;
   items = await api('/api/items');
   render();
 }
@@ -77,88 +88,160 @@ function fillStatic() {
   $('fSeasonSel').replaceChildren(opt('', '—'), ...SEASONS.map(c => opt(c)));
   $('fOwnerSel').replaceChildren(opt('', '—'), ...session.members.map(c => opt(c)));
   $('sizes').replaceChildren(...SIZES.map(s => opt(s)));
+  $('fSeason').replaceChildren(opt('', 'Elk seizoen'), ...SEASONS.map(c => opt(c)));
 }
 $('me').addEventListener('change', () => local('kast.me', $('me').value));
 const meName = () => $('me').value || session.members[0] || '';
 
-function fillFilters() {
-  const keep = (id) => $(id).value;
-  const set = (id, all, values) => { const k = keep(id); $(id).replaceChildren(opt('', all), ...values.map(v => opt(v))); $(id).value = values.includes(k) ? k : ''; };
-  const used = (key) => [...new Set(items.map(i => i[key]).filter(Boolean))];
-  set('fCat', 'Alle categorieën', CATEGORIES.filter(c => used('category').includes(c)).concat(used('category').filter(c => !CATEGORIES.includes(c))));
-  set('fOwner', 'Van iedereen', used('owner').sort());
-  set('fSeason', 'Elk seizoen', SEASONS.filter(s => used('season').includes(s)));
-  set('fColor', 'Alle kleuren', Object.keys(COLORS).filter(c => used('color').includes(c)));
-  const sizeOrder = (s) => { const i = SIZES.indexOf(s); return i < 0 ? 999 : i; };
-  set('fSize', 'Alle maten', used('size').sort((a, b) => sizeOrder(a) - sizeOrder(b) || a.localeCompare(b)));
-}
-
 /* ---------- overzicht ---------- */
+const matchesBase = (it, skip) => {
+  const q = F.q.trim().toLowerCase();
+  if (skip !== 'status') {
+    if (F.status === 'kast' && it.status !== 'kast') return false;
+    if (F.status === 'was' && it.status !== 'was') return false;
+    if (F.status === 'weg' && it.status !== 'weg') return false;
+    if (F.status === 'lazy' && !isLazy(it)) return false;
+  }
+  if (skip !== 'cat' && F.cat && it.category !== F.cat) return false;
+  if (skip !== 'color' && F.color && it.color !== F.color) return false;
+  if (skip !== 'owner' && F.owner && it.owner !== F.owner) return false;
+  if (F.season && it.season !== F.season) return false;
+  if (F.size && it.size !== F.size) return false;
+  if (q && !`${it.name} ${it.brand} ${it.color} ${it.category} ${it.material} ${it.location} ${it.notes} ${it.tags.join(' ')}`.toLowerCase().includes(q)) return false;
+  return true;
+};
+
 function visible() {
-  const q = $('search').value.trim().toLowerCase();
-  const f = { category: $('fCat').value, owner: $('fOwner').value, season: $('fSeason').value, color: $('fColor').value, size: $('fSize').value };
-  let list = items.filter(it => {
-    if (chip === 'kast' && it.status !== 'kast') return false;
-    if (chip === 'was' && it.status !== 'was') return false;
-    if (chip === 'weg' && it.status !== 'weg') return false;
-    if (chip === 'lazy' && !isLazy(it)) return false;
-    for (const [k, v] of Object.entries(f)) if (v && it[k] !== v) return false;
-    if (q && !`${it.name} ${it.brand} ${it.color} ${it.category} ${it.material} ${it.location} ${it.notes} ${it.tags.join(' ')}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
-  const sort = $('fSort').value;
   const cmp = {
     new: (a, b) => b.created - a.created,
     name: (a, b) => a.name.localeCompare(b.name, 'nl'),
     least: (a, b) => a.wears.length - b.wears.length || lastWorn(a) - lastWorn(b),
-    most: (a, b) => b.wears.length - a.wears.length,
-    cat: (a, b) => a.category.localeCompare(b.category, 'nl') || a.name.localeCompare(b.name, 'nl')
-  }[sort];
-  return list.sort(cmp);
+    most: (a, b) => b.wears.length - a.wears.length
+  }[F.sort];
+  return items.filter(it => matchesBase(it)).sort(cmp);
 }
-
-const photoUrl = (id, p, thumb) => `/photos/${id}/${p}${thumb ? '.t' : ''}.jpg`;
 
 function thumb(it) {
   const box = h('div', { class: 'thumb' });
-  box.style.setProperty('--sw', COLORS[it.color] || '#9a9a9a');
+  box.style.setProperty('--sw', swatch(it.color));
   if (it.photos[0]) box.append(h('img', { src: photoUrl(it.id, it.photos[0], true), alt: '', loading: 'lazy' }));
-  else box.append('👕');
+  else box.append(CAT_ICON[it.category] || '👕');
   return box;
+}
+const photoUrl = (id, p, thumb) => `/photos/${id}/${p}${thumb ? '.t' : ''}.jpg`;
+
+function card(it) {
+  const wornToday = it.wears.length && sameDay(lastWorn(it), Date.now());
+  const meta1 = h('div', { class: 'cmeta' }, h('span', { class: 'dot' }), [it.size && 'Maat ' + it.size, it.color].filter(Boolean).join(' · ') || ' ');
+  meta1.firstChild.style.setProperty('--sw', swatch(it.color));
+  const label = 'Open ' + (it.name || 'kledingstuk');
+  return h('article', { class: 'card' },
+    h('div', { class: 'media' },
+      h('button', { class: 'open thumbbtn', onclick: () => openItem(it), 'aria-label': label }, thumb(it)),
+      it.wears.length ? h('span', { class: 'tag worn' }, it.wears.length + '×') : null,
+      it.owner ? avatar(it.owner, 'on-card') : null,
+      it.status === 'kast' ? h('button', { class: 'quick' + (wornToday ? ' done' : ''), 'aria-label': 'Vandaag gedragen', title: 'Vandaag gedragen', onclick: () => wearToday(it) }, '👕') : null),
+    h('button', { class: 'open textbtn', onclick: () => openItem(it), 'aria-label': label },
+      h('div', { class: 'cname' }, it.name || 'Zonder naam'),
+      meta1,
+      h('div', { class: 'cmeta' }, [it.category, it.status === 'was' ? 'in de was' : it.status === 'weg' ? 'weggegeven' : ''].filter(Boolean).join(' · ') || ' ')));
+}
+
+async function wearToday(it) {
+  if (it.wears.length && sameDay(lastWorn(it), Date.now())) return toast('Vandaag al genoteerd');
+  try {
+    const saved = await api(`/api/items/${it.id}`, { method: 'PUT', body: JSON.stringify({ ...it, wears: [...it.wears, Date.now()] }) });
+    replace(saved); render(); toast(`Genoteerd: ${saved.name} 👕`);
+    return saved;
+  } catch (e) { toast(e.message); }
 }
 
 function render() {
-  fillFilters();
+  const base = items.filter(it => it.status === 'kast');
+  const lazy = items.filter(isLazy).length;
+  const value = base.reduce((s, i) => s + (i.price || 0), 0);
+
+  /* samenvatting */
+  const tile = (n, label, on, hot) => h('button', { class: 'tile' + (hot ? ' hot' : ''), onclick: on }, h('b', {}, n), h('span', {}, label));
+  $('summary').replaceChildren(
+    tile(base.length, 'in de kast', () => { F.status = 'kast'; sync(); }),
+    tile(lazy, 'lang niet gedragen', () => { F.status = 'lazy'; sync(); }, lazy > 0),
+    tile(value ? money(value) : '—', 'aankoopwaarde', () => {}));
+
+  /* categorieën: alleen wat voorkomt, met aantallen binnen de andere filters */
+  const inCat = (c) => items.filter(it => matchesBase(it, 'cat') && it.category === c).length;
+  const cats = [...CATEGORIES, ...new Set(items.map(i => i.category).filter(c => c && !CATEGORIES.includes(c)))].filter(c => inCat(c) || F.cat === c);
+  const allCount = items.filter(it => matchesBase(it, 'cat')).length;
+  $('catRow').replaceChildren(
+    h('button', { class: 'cat' + (!F.cat ? ' on' : ''), onclick: () => { F.cat = ''; sync(); } }, h('span', { class: 'ci' }, '✨'), `Alles ${allCount}`),
+    ...cats.map(c => h('button', { class: 'cat' + (F.cat === c ? ' on' : ''), onclick: () => { F.cat = F.cat === c ? '' : c; sync(); } }, h('span', { class: 'ci' }, CAT_ICON[c] || '🏷️'), `${c.split(' ')[0]} ${inCat(c)}`)));
+
+  /* kleuren */
+  const usedColors = Object.keys(COLORS).filter(c => items.some(it => matchesBase(it, 'color') && it.color === c) || F.color === c);
+  $('colorRow').replaceChildren(...usedColors.map(c => {
+    const b = h('button', { class: 'sw' + (F.color === c ? ' on' : ''), 'aria-label': c, 'aria-pressed': String(F.color === c), title: c, onclick: () => { F.color = F.color === c ? '' : c; sync(); } });
+    b.style.setProperty('--sw', swatch(c)); b.style.background = swatch(c);
+    return b;
+  }));
+
+  /* personen */
+  const owners = session.members.filter(m => items.some(i => i.owner === m));
+  $('personRow').replaceChildren(
+    h('button', { class: 'pbtn all' + (!F.owner ? ' on' : ''), onclick: () => { F.owner = ''; sync(); } }, 'Iedereen'),
+    ...owners.map(m => h('button', { class: 'pbtn' + (F.owner === m ? ' on' : ''), onclick: () => { F.owner = F.owner === m ? '' : m; sync(); } }, avatar(m), m)));
+
+  /* meer filters */
+  const sizes = [...new Set(items.map(i => i.size).filter(Boolean))].sort((a, b) => (SIZES.indexOf(a) < 0 ? 999 : SIZES.indexOf(a)) - (SIZES.indexOf(b) < 0 ? 999 : SIZES.indexOf(b)) || a.localeCompare(b));
+  const keepSize = F.size;
+  $('fSize').replaceChildren(opt('', 'Alle maten'), ...sizes.map(s => opt(s))); $('fSize').value = sizes.includes(keepSize) ? keepSize : '';
+  $('fSeason').value = F.season; $('fSort').value = F.sort;
+  document.querySelectorAll('#chips button').forEach(b => b.classList.toggle('on', b.dataset.c === F.status));
+  const extra = [F.season, F.size, F.status !== 'kast' ? 'x' : ''].filter(Boolean).length;
+  $('moreSum').textContent = extra ? `Meer filters (${extra} actief)` : 'Meer filters';
+
+  /* resultaat */
   const list = visible();
-  const nFilters = ['fCat', 'fOwner', 'fSeason', 'fColor', 'fSize'].filter(id => $(id).value).length;
-  $('filterSum').textContent = nFilters ? `Filters en sorteren (${nFilters} actief)` : 'Filters en sorteren';
-  $('grid').replaceChildren(...list.map(it => h('button', { class: 'card', onclick: () => openItem(it) },
-    thumb(it),
-    h('div', { class: 'cname' }, it.name || 'Zonder naam'),
-    h('div', { class: 'cmeta' }, [it.size && 'Maat ' + it.size, it.color].filter(Boolean).join(' · ') || ' '),
-    h('div', { class: 'cmeta' }, [it.category, it.owner].filter(Boolean).join(' · ') || ' '),
-    it.status === 'was' ? h('span', { class: 'tag' }, 'In de was') : null,
-    it.wears.length ? h('span', { class: 'tag worn' }, it.wears.length + '×') : null)));
-  const active = items.filter(i => i.status === 'kast').length;
-  $('count').textContent = `${active} in de kast`;
+  const active = [F.q, F.cat, F.color, F.owner, F.season, F.size].filter(Boolean).length + (F.status !== 'kast' ? 1 : 0);
+  $('resultCount').textContent = `${list.length} ${list.length === 1 ? 'stuk' : 'stuks'}`;
+  $('clearFilters').hidden = !active;
+  document.querySelectorAll('#viewToggle button').forEach(b => b.classList.toggle('on', b.dataset.view === F.view));
+
+  $('grid').hidden = F.view !== 'grid' || !list.length;
+  $('shelves').hidden = F.view !== 'shelf' || !list.length;
+  $('grid').replaceChildren(...(F.view === 'grid' ? list.map(card) : []));
+  if (F.view === 'shelf') {
+    const groups = new Map();
+    for (const it of list) { const k = it.category || 'Overig'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(it); }
+    const order = [...CATEGORIES, 'Overig'];
+    $('shelves').replaceChildren(...[...groups.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .map(([name, arr]) => h('section', { class: 'shelf' }, h('h3', {}, (CAT_ICON[name] || '🏷️') + ' ' + name, h('small', {}, arr.length)), h('div', { class: 'shelfrow' }, arr.map(card)))));
+  }
+
   const empty = $('empty');
   empty.hidden = list.length > 0;
-  empty.textContent = items.length ? 'Niets gevonden met deze filters.' : 'Nog geen kleding. Tik op + om je eerste kledingstuk te fotograferen.';
-  const value = items.filter(i => i.status === 'kast').reduce((s, i) => s + (i.price || 0), 0);
-  $('stats').textContent = `${items.length} items, ${items.filter(isLazy).length} lang niet gedragen${value ? `, aankoopwaarde €${Math.round(value)}` : ''}.`;
+  empty.replaceChildren();
+  if (!list.length) {
+    if (!items.length) empty.append(h('div', { class: 'big' }, '🧺'), h('h3', {}, 'Je kast is nog leeg'), h('p', {}, 'Tik op + en maak een foto van je eerste kledingstuk.'));
+    else empty.append(h('div', { class: 'big' }, '🔍'), h('h3', {}, 'Niets gevonden'), h('p', {}, 'Er is geen kleding met deze filters.'), h('button', { onclick: clearAll }, 'Wis filters'));
+  }
+  $('stats').textContent = `${items.length} items, ${lazy} lang niet gedragen${value ? `, aankoopwaarde ${money(value)}` : ''}.`;
 }
-for (const id of ['search', 'fCat', 'fOwner', 'fSeason', 'fColor', 'fSize', 'fSort']) $(id).addEventListener('input', render);
-$('chips').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  chip = b.dataset.c;
-  document.querySelectorAll('#chips button').forEach(x => x.classList.toggle('on', x === b));
-  render();
-});
+const sync = () => render();
+function clearAll() { Object.assign(F, { q: '', cat: '', color: '', owner: '', season: '', size: '', status: 'kast' }); $('search').value = ''; render(); }
+$('clearFilters').addEventListener('click', clearAll);
+$('search').addEventListener('input', () => { F.q = $('search').value; render(); });
+$('fSeason').addEventListener('input', () => { F.season = $('fSeason').value; render(); });
+$('fSize').addEventListener('input', () => { F.size = $('fSize').value; render(); });
+$('fSort').addEventListener('input', () => { F.sort = $('fSort').value; render(); });
+$('chips').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { F.status = b.dataset.c; render(); } });
+$('viewToggle').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { F.view = b.dataset.view; local('kast.view', F.view); render(); } });
+F.view = local('kast.view') === 'shelf' ? 'shelf' : 'grid';
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   $('view-kast').hidden = b.dataset.v !== 'kast'; $('view-settings').hidden = b.dataset.v !== 'settings';
   $('add').hidden = b.dataset.v !== 'kast';
 }));
+window.addEventListener('scroll', () => $('app').hidden || document.querySelector('.bar')?.classList.toggle('stuck', window.scrollY > 90), { passive: true });
 
 /* ---------- foto's verwerken ---------- */
 async function bitmap(file) {
@@ -224,6 +307,7 @@ function drawPhotos() {
     ...cur.pending.map(p => h('div', { class: 'ph' }, h('img', { src: p.url, alt: '' }),
       h('button', { type: 'button', 'aria-label': 'Foto verwijderen', onclick: () => { URL.revokeObjectURL(p.url); cur.pending = cur.pending.filter(x => x !== p); drawPhotos(); } }, '×'))));
   $('aiBtn').hidden = !(session.ai && cur.pending.length);
+  $('photoTip').hidden = cur.photos.length + cur.pending.length > 0;
 }
 
 /* ---------- AI-herkenning ---------- */
@@ -242,38 +326,64 @@ async function analyzeFirst() {
 }
 $('aiBtn').addEventListener('click', analyzeFirst);
 
-/* ---------- kledingstuk bewerken ---------- */
+
+/* ---------- kledingstuk bekijken en bewerken ---------- */
 const dlg = $('dlg');
+const showPanel = (name) => { $('viewPanel').hidden = name !== 'view'; $('itemForm').hidden = name !== 'edit'; };
+function replace(it) { const i = items.findIndex(x => x.id === it.id); if (i >= 0) items[i] = it; else items.unshift(it); }
+
 function openItem(it) {
+  if (!it) return openEdit(null);
+  renderView(it);
+  if (!dlg.open) dlg.showModal();
+}
+
+function renderView(it) {
+  const gal = h('div', { class: 'gallery' });
+  if (it.photos.length) for (const p of it.photos) gal.append(h('div', { class: 'gph' }, h('img', { src: photoUrl(it.id, p, false), alt: it.name })));
+  else { const g = h('div', { class: 'gph' }, CAT_ICON[it.category] || '👕'); g.style.setProperty('--sw', swatch(it.color)); gal.append(g); }
+
+  const dot = h('span', { class: 'dot' }); dot.style.setProperty('--sw', swatch(it.color));
+  const facts = h('div', { class: 'facts' },
+    it.category ? h('span', { class: 'fact' }, (CAT_ICON[it.category] || '') + ' ' + it.category) : null,
+    it.size ? h('span', { class: 'fact' }, 'Maat ' + it.size) : null,
+    it.color ? h('span', { class: 'fact' }, dot, it.color) : null,
+    it.season ? h('span', { class: 'fact' }, it.season) : null,
+    it.owner ? h('span', { class: 'fact' }, avatar(it.owner), it.owner) : null,
+    it.status !== 'kast' ? h('span', { class: 'fact' }, it.status === 'was' ? 'In de was' : 'Weggegeven') : null);
+
+  const rows = [['Merk', it.brand], ['Materiaal', it.material], ['Plek', it.location], ['Prijs', it.price != null ? '€' + it.price.toFixed(2).replace('.', ',') : ''],
+    ['Gekocht', it.boughtAt ? new Date(it.boughtAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''], ['Tags', it.tags.join(', ')], ['Notities', it.notes]].filter(r => r[1]);
+  const detail = rows.length ? h('dl', { class: 'detail' }, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])) : null;
+
+  const n = it.wears.length;
+  const perWear = it.price && n ? ` · €${(it.price / n).toFixed(2).replace('.', ',')} per keer` : '';
+  const wear = h('div', { class: 'wear' },
+    h('div', {}, h('b', {}, n + '×'), h('div', { class: 'muted' }, (n ? `laatst ${agoText(lastWorn(it))}` : 'nog niet gedragen') + perWear)),
+    it.status === 'kast' ? h('button', { class: 'primary', id: 'wearBtn', onclick: async () => { const s = await wearToday(it); if (s) renderView(s); } }, '👕 Vandaag gedragen') : null);
+
+  $('viewPanel').replaceChildren(gal, h('h2', { class: 'vtitle' }, it.name || 'Zonder naam'), facts, wear, detail,
+    h('div', { class: 'row' }, h('button', { id: 'editBtn', onclick: () => openEdit(it) }, '✏️ Bewerken'), h('button', { id: 'viewClose', onclick: () => dlg.close() }, 'Sluiten')));
+  showPanel('view');
+}
+
+function openEdit(it) {
   const isNew = !it;
-  const item = it || { id: uid(), name: '', category: '', color: '', size: '', brand: '', season: '', material: '', location: '', owner: meName(), status: 'kast', price: null, boughtAt: '', tags: [], notes: '', photos: [], wears: [], created: Date.now() };
+  const item = it || { id: uid(), name: '', category: F.cat, color: '', size: '', brand: '', season: '', material: '', location: '', owner: meName(), status: 'kast', price: null, boughtAt: '', tags: [], notes: '', photos: [], wears: [], created: Date.now() };
   cur = { item, isNew, pending: [], photos: [...item.photos] };
+  $('formTitle').textContent = isNew ? 'Nieuw kledingstuk' : 'Bewerken';
   $('fName').value = item.name; $('fCategory').value = item.category; $('fColorSel').value = item.color; $('fSizeIn').value = item.size;
   $('fBrand').value = item.brand; $('fSeasonSel').value = item.season; $('fOwnerSel').value = item.owner; $('fMaterial').value = item.material;
   $('fLocation').value = item.location; $('fPrice').value = item.price ?? ''; $('fBought').value = item.boughtAt; $('fTags').value = item.tags.join(', ');
   $('fStatus').value = item.status; $('fNotes').value = item.notes; $('saveErr').textContent = ''; $('aiMsg').textContent = '';
-  $('delBtn').hidden = isNew; $('wearBox').hidden = isNew;
-  updateWear(); drawPhotos();
-  dlg.showModal();
+  $('moreDetails').open = !isNew;
+  $('delBtn').hidden = isNew;
+  drawPhotos(); showPanel('edit');
+  if (!dlg.open) dlg.showModal();
 }
-function updateWear() {
-  const w = cur.item.wears;
-  $('wearInfo').textContent = w.length ? `${w.length}× gedragen, laatst ${agoText(Math.max(...w))}` : 'Nog niet gedragen';
-  const p = cur.item.price;
-  if (p && w.length) $('wearInfo').textContent += ` · €${(p / w.length).toFixed(2)} per keer`;
-}
-$('add').addEventListener('click', () => openItem(null));
-$('closeBtn').addEventListener('click', () => dlg.close());
-dlg.addEventListener('close', () => { for (const p of cur?.pending || []) URL.revokeObjectURL(p.url); });
-
-$('wearBtn').addEventListener('click', async () => {
-  const last = lastWorn(cur.item);
-  if (last && daysAgo(last) === 0 && new Date(last).getDate() === new Date().getDate()) return toast('Vandaag al genoteerd');
-  const next = { ...cur.item, wears: [...cur.item.wears, Date.now()] };
-  try { cur.item = await api(`/api/items/${next.id}`, { method: 'PUT', body: JSON.stringify(next) }); replace(cur.item); updateWear(); render(); toast('Genoteerd 👕'); }
-  catch (e) { toast(e.message); }
-});
-function replace(it) { const i = items.findIndex(x => x.id === it.id); if (i >= 0) items[i] = it; else items.unshift(it); }
+$('add').addEventListener('click', () => openEdit(null));
+$('closeBtn').addEventListener('click', () => { if (cur && !cur.isNew) renderView(cur.item); else dlg.close(); });
+dlg.addEventListener('close', () => { for (const p of cur?.pending || []) URL.revokeObjectURL(p.url); cur = null; });
 
 $('itemForm').addEventListener('submit', async (e) => {
   e.preventDefault(); $('saveErr').textContent = '';
@@ -292,14 +402,16 @@ $('itemForm').addEventListener('submit', async (e) => {
       tags: $('fTags').value.split(',').map(t => t.trim()).filter(Boolean), status: $('fStatus').value, notes: $('fNotes').value.trim(),
       photos: [...cur.photos, ...cur.pending.map(p => p.pid)]
     };
-    replace(await api(`/api/items/${old.id}`, { method: 'PUT', body: JSON.stringify(body) }));
-    dlg.close(); render(); toast('Opgeslagen ✓');
+    const saved = await api(`/api/items/${old.id}`, { method: 'PUT', body: JSON.stringify(body) });
+    replace(saved); render();
+    if (cur.isNew) { dlg.close(); toast('Toegevoegd ✓'); } else { cur = null; renderView(saved); toast('Opgeslagen ✓'); }
   } catch (err) { $('saveErr').textContent = 'Opslaan mislukt: ' + err.message; }
   btn.disabled = false;
 });
 $('delBtn').addEventListener('click', async () => {
-  if ($('delBtn').dataset.sure !== '1') { $('delBtn').dataset.sure = '1'; $('delBtn').textContent = 'Zeker weten?'; setTimeout(() => { $('delBtn').dataset.sure = ''; $('delBtn').textContent = 'Verwijderen'; }, 3000); return; }
-  $('delBtn').dataset.sure = ''; $('delBtn').textContent = 'Verwijderen';
+  const btn = $('delBtn');
+  if (btn.dataset.sure !== '1') { btn.dataset.sure = '1'; btn.textContent = 'Zeker weten?'; setTimeout(() => { btn.dataset.sure = ''; btn.textContent = 'Verwijderen'; }, 3000); return; }
+  btn.dataset.sure = ''; btn.textContent = 'Verwijderen';
   try { await api(`/api/items/${cur.item.id}`, { method: 'DELETE' }); items = items.filter(i => i.id !== cur.item.id); dlg.close(); render(); toast('Verwijderd'); }
   catch (e) { $('saveErr').textContent = e.message; }
 });
