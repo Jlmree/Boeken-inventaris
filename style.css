@@ -20,6 +20,7 @@ button,.btn{cursor:pointer;display:inline-flex;align-items:center;justify-conten
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.8rem;margin-top:.8rem}
 .card{display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:.5rem;gap:.15rem;position:relative}
 .ctitle{font-weight:600;font-size:.88rem;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cgenre{font-size:.72rem;color:var(--accent);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cauthor,.cowner{font-size:.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badges{display:flex;gap:.25rem;flex-wrap:wrap;position:absolute;top:.65rem;left:.65rem;right:.65rem}
 .badge{font-size:.72rem;font-weight:700;color:#fff;border-radius:6px;padding:.05rem .4rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

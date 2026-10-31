@@ -1,4 +1,4 @@
-const CACHE = 'boekenkast-v1';
+const CACHE = 'boekenkast-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'store.js', 'lookup.js', 'scanner.js', 'config.js', 'manifest.json', 'icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

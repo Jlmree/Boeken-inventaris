@@ -30,6 +30,10 @@
     </div>
     <div class="row">
       <select id="ownerFilter" aria-label="Eigenaar"><option value="">Van iedereen</option></select>
+      <select id="categoryFilter" aria-label="Categorie"><option value="">Alle categorieën</option></select>
+    </div>
+    <div class="row">
+      <select id="genreFilter" aria-label="Genre"><option value="">Alle genres</option></select>
       <select id="sort" aria-label="Sorteren">
         <option value="added">Nieuwste eerst</option>
         <option value="title">Titel A–Z</option>
@@ -98,6 +102,15 @@
         <input id="fAuthors" placeholder="Auteur(s)">
         <small id="fMeta" class="muted"></small>
       </div>
+    </div>
+    <div class="row">
+      <label>Categorie
+        <select id="fCategory"></select>
+      </label>
+      <label>Genre
+        <input id="fGenre" list="genres" placeholder="bv. Thriller" autocomplete="off">
+        <datalist id="genres"></datalist>
+      </label>
     </div>
     <label>Van wie is het boek?
       <input id="fOwner" list="owners" placeholder="naam">
