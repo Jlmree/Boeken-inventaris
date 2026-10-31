@@ -50,8 +50,17 @@ export function classify(raw) {
 
 const https = (u) => (u ? u.replace(/^http:/, 'https:') : '');
 
+async function fetchRetry(url) {
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch(url);
+    if (r.ok || (r.status !== 429 && r.status < 500)) return r;
+    await new Promise(res => setTimeout(res, 800));
+  }
+  return fetch(url);
+}
+
 async function google(isbn) {
-  const r = await fetch('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&maxResults=1');
+  const r = await fetchRetry('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&maxResults=1');
   if (!r.ok) return null;
   const v = (await r.json()).items?.[0]?.volumeInfo;
   if (!v) return null;
@@ -61,12 +70,12 @@ async function google(isbn) {
     publisher: v.publisher || '',
     year: (v.publishedDate || '').slice(0, 4),
     ...classify(v.categories),
-    cover: https(v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || '')
+    cover: https(v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || '').replace('&edge=curl', '')
   };
 }
 
 async function openLibrary(isbn) {
-  const r = await fetch('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
+  const r = await fetchRetry('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
   if (!r.ok) return null;
   const v = (await r.json())['ISBN:' + isbn];
   if (!v) return null;
@@ -80,12 +89,29 @@ async function openLibrary(isbn) {
   };
 }
 
+/** Controleert of een afbeelding echt laadt (en geen leeg plaatje van 1x1 pixel is). */
+function imageOk(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const t = setTimeout(() => resolve(false), 5000);
+    img.onload = () => { clearTimeout(t); resolve(img.naturalWidth > 40 && img.naturalHeight > 40); };
+    img.onerror = () => { clearTimeout(t); resolve(false); };
+    img.referrerPolicy = 'no-referrer';
+    img.src = url;
+  });
+}
+
+const FIELDS = ['title', 'authors', 'publisher', 'year', 'category', 'genre'];
+
+/** Zoekt in alle bronnen, vult ontbrekende velden aan uit de volgende bron en kiest de eerste cover die echt laadt. */
 export async function lookupIsbn(isbn) {
-  for (const fn of [google, openLibrary]) {
-    try {
-      const res = await fn(isbn);
-      if (res && res.title) return { isbn, ...res };
-    } catch (e) { console.warn('lookup fout', e); }
-  }
-  return null;
+  const results = await Promise.all([google, openLibrary].map(fn => fn(isbn).catch(e => { console.warn('lookup fout', e); return null; })));
+  const found = results.filter(r => r && r.title);
+  if (!found.length) return null;
+  const merged = { isbn };
+  for (const f of FIELDS) merged[f] = found.map(r => r[f]).find(Boolean) || '';
+  const covers = [...found.map(r => r.cover), `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`].filter(Boolean);
+  merged.cover = '';
+  for (const c of [...new Set(covers)]) if (await imageOk(c)) { merged.cover = c; break; }
+  return merged;
 }
