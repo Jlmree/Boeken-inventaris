@@ -4,6 +4,7 @@ Gezins-inventaris van boeken. Scan de barcode (ISBN) met je telefoon en titel, a
 
 - Scannen met de camera, een foto, of ISBN intypen
 - Overzicht met covers, zoeken, filteren (gelezen / ongelezen / uitgeleend / geleend), sorteren
+- Categorie (Fictie, Non-fictie, Kinderboeken, …) en genre per boek, automatisch voorgesteld en te wijzigen; filteren op beide
 - Per boek: van wie, gelezen (door wie), uitgeleend aan / geleend van (met datum), notities
 - Dubbelen worden herkend bij het scannen
 - Werkt als app op je telefoon (PWA) en op de computer, ook offline

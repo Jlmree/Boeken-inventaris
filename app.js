@@ -1,5 +1,5 @@
 import { getSettings, saveSettings, loadBooks, putBook, deleteBook, newId, pull, syncEnabled } from './store.js';
-import { lookupIsbn, normalizeIsbn } from './lookup.js';
+import { lookupIsbn, normalizeIsbn, CATEGORIES, GENRES } from './lookup.js';
 import { startCamera, decodeImage } from './scanner.js';
 
 const $ = (id) => document.getElementById(id);
@@ -54,13 +54,16 @@ function render() {
   const q = $('search').value.trim().toLowerCase();
   const owner = $('ownerFilter').value;
   const sort = $('sort').value;
+  const cat = $('categoryFilter').value, genre = $('genreFilter').value;
   let list = books.filter(b => {
     if (owner && b.owner !== owner) return false;
+    if (cat && b.category !== cat) return false;
+    if (genre && b.genre !== genre) return false;
     if (filter === 'unread' && b.read) return false;
     if (filter === 'read' && !b.read) return false;
     if (filter === 'lent-out' && b.loan?.type !== 'out') return false;
     if (filter === 'lent-in' && b.loan?.type !== 'in') return false;
-    if (q && !`${b.title} ${b.authors} ${b.isbn} ${b.owner} ${b.notes || ''}`.toLowerCase().includes(q)) return false;
+    if (q && !`${b.title} ${b.authors} ${b.isbn} ${b.owner} ${b.category || ''} ${b.genre || ''} ${b.notes || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const cmp = {
@@ -80,6 +83,7 @@ function render() {
       cover(b),
       h('div', { class: 'ctitle' }, b.title),
       h('div', { class: 'cauthor' }, b.authors || ''),
+      (b.genre || b.category) ? h('div', { class: 'cgenre' }, b.genre || b.category) : null,
       b.owner ? h('div', { class: 'cowner' }, 'van ' + b.owner) : null,
       h('div', { class: 'badges' }, badges));
   }));
@@ -92,9 +96,22 @@ function render() {
   $('ownerFilter').replaceChildren(h('option', { value: '' }, 'Van iedereen'), ...owners.map(o => h('option', { value: o }, o)));
   $('ownerFilter').value = owners.includes(cur) ? cur : '';
   $('owners').replaceChildren(...owners.map(o => h('option', { value: o })));
+
+  const fill = (sel, all, values) => {
+    const keep = sel.value;
+    sel.replaceChildren(h('option', { value: '' }, all), ...values.map(v => h('option', { value: v }, v)));
+    sel.value = values.includes(keep) ? keep : '';
+  };
+  const used = (key) => [...new Set(books.map(b => b[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'nl'));
+  fill($('categoryFilter'), 'Alle categorieën', used('category'));
+  fill($('genreFilter'), 'Alle genres', used('genre'));
+  $('genres').replaceChildren(...[...new Set([...GENRES, ...used('genre')])].sort((a, b) => a.localeCompare(b, 'nl')).map(g => h('option', { value: g })));
+  $('fCategory').replaceChildren(h('option', { value: '' }, '—'), ...[...new Set([...CATEGORIES, ...used('category')])].map(c => h('option', { value: c }, c)));
 }
 $('search').addEventListener('input', render);
 $('ownerFilter').addEventListener('change', render);
+$('categoryFilter').addEventListener('change', render);
+$('genreFilter').addEventListener('change', render);
 $('sort').addEventListener('change', render);
 $('filters').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -115,6 +132,8 @@ function openBook(book, fresh = false) {
   $('fTitle').value = book.title || '';
   $('fAuthors').value = book.authors || '';
   $('fMeta').textContent = [book.publisher, book.year, book.isbn && 'ISBN ' + book.isbn].filter(Boolean).join(' · ');
+  $('fCategory').value = book.category || '';
+  $('fGenre').value = book.genre || '';
   $('fOwner').value = book.owner || (fresh ? getSettings().name : '') || '';
   $('fRead').checked = !!book.read;
   $('fReadBy').value = book.readBy || '';
@@ -143,6 +162,8 @@ $('bookForm').addEventListener('submit', async (e) => {
     ...editing,
     title: $('fTitle').value.trim(),
     authors: $('fAuthors').value.trim(),
+    category: $('fCategory').value,
+    genre: $('fGenre').value.trim(),
     owner: $('fOwner').value.trim(),
     read: $('fRead').checked,
     readBy: $('fRead').checked ? $('fReadBy').value.trim() : '',
@@ -231,9 +252,9 @@ $('saveSettings').addEventListener('click', async () => {
   $('setmsg').textContent = syncEnabled() ? 'Klaar. Status: ' + $('syncstate').title : 'Opgeslagen (alleen lokaal).';
 });
 $('exportCsv').addEventListener('click', () => {
-  const cols = ['title', 'authors', 'isbn', 'publisher', 'year', 'owner', 'read', 'readBy', 'loanType', 'loanWho', 'loanSince', 'notes'];
+  const cols = ['title', 'authors', 'isbn', 'publisher', 'year', 'category', 'genre', 'owner', 'read', 'readBy', 'loanType', 'loanWho', 'loanSince', 'notes'];
   const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const rows = books.map(b => [b.title, b.authors, b.isbn, b.publisher, b.year, b.owner, b.read ? 'ja' : 'nee', b.readBy, b.loan?.type, b.loan?.who, b.loan?.since, b.notes].map(q).join(','));
+  const rows = books.map(b => [b.title, b.authors, b.isbn, b.publisher, b.year, b.category, b.genre, b.owner, b.read ? 'ja' : 'nee', b.readBy, b.loan?.type, b.loan?.who, b.loan?.since, b.notes].map(q).join(','));
   const url = URL.createObjectURL(new Blob(['﻿' + cols.join(',') + '\n' + rows.join('\n')], { type: 'text/csv' }));
   h('a', { href: url, download: 'boeken.csv' }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

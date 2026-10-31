@@ -19,6 +19,35 @@ function isbn10Ok(s) {
   return sum % 11 === 0;
 }
 
+export const CATEGORIES = ['Fictie', 'Non-fictie', 'Kinderboeken', 'Stripboeken', 'Studie & naslag'];
+export const GENRES = ['Roman', 'Thriller', 'Detective', 'Fantasy', 'Sciencefiction', 'Romantiek', 'Historisch', 'Horror', 'Humor', 'Poëzie', 'Biografie', 'Geschiedenis', 'Wetenschap', 'Psychologie', 'Zelfhulp', 'Reizen', 'Koken', 'Kunst', 'Religie', 'Natuur', 'Techniek', 'Informatica', 'Economie', 'Sport'];
+
+const GENRE_RULES = [
+  [/thriller|suspense/, 'Thriller'], [/mystery|detective|crime/, 'Detective'], [/fantasy/, 'Fantasy'],
+  [/science fiction|sci-fi/, 'Sciencefiction'], [/romance|love stor/, 'Romantiek'], [/historical fiction/, 'Historisch'],
+  [/horror/, 'Horror'], [/humou?r|comedy/, 'Humor'], [/poetry|poem/, 'Poëzie'],
+  [/biograph|autobiograph|memoir/, 'Biografie'], [/history/, 'Geschiedenis'], [/psycholog/, 'Psychologie'],
+  [/self-help|personal growth/, 'Zelfhulp'], [/travel/, 'Reizen'], [/cook|food|recipe/, 'Koken'],
+  [/\bart\b|photograph|design/, 'Kunst'], [/religio|spiritual|bible/, 'Religie'], [/nature|animal|garden/, 'Natuur'],
+  [/computer|programming|software/, 'Informatica'], [/technology|engineering/, 'Techniek'],
+  [/business|econom|finance/, 'Economie'], [/sport|recreation/, 'Sport'], [/science|math|physics|biology/, 'Wetenschap'],
+  [/literary|general fiction|fiction/, 'Roman']
+];
+
+/** Leidt categorie en genre af uit Engelse categorieën/onderwerpen van Google Books of Open Library. */
+export function classify(raw) {
+  const t = (Array.isArray(raw) ? raw.join(' / ') : String(raw || '')).toLowerCase();
+  if (!t) return {};
+  let category = '';
+  if (/juvenile|children|young adult/.test(t)) category = 'Kinderboeken';
+  else if (/comic|graphic novel|manga/.test(t)) category = 'Stripboeken';
+  else if (/textbook|study|reference|education/.test(t)) category = 'Studie & naslag';
+  else if (/fiction|novel|stories/.test(t) && !/nonfiction|non-fiction/.test(t)) category = 'Fictie';
+  else category = 'Non-fictie';
+  const genre = GENRE_RULES.find(([re]) => re.test(t))?.[1] || '';
+  return { category, genre };
+}
+
 const https = (u) => (u ? u.replace(/^http:/, 'https:') : '');
 
 async function google(isbn) {
@@ -31,6 +60,7 @@ async function google(isbn) {
     authors: (v.authors || []).join(', '),
     publisher: v.publisher || '',
     year: (v.publishedDate || '').slice(0, 4),
+    ...classify(v.categories),
     cover: https(v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || '')
   };
 }
@@ -45,6 +75,7 @@ async function openLibrary(isbn) {
     authors: (v.authors || []).map(a => a.name).join(', '),
     publisher: (v.publishers || [])[0]?.name || '',
     year: (v.publish_date || '').match(/\d{4}/)?.[0] || '',
+    ...classify((v.subjects || []).map(s => s.name).slice(0, 12)),
     cover: https(v.cover?.medium || v.cover?.small || '') || `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`
   };
 }
